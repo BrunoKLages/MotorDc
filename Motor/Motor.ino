@@ -1,14 +1,14 @@
 #define N_FUROS 20
-#define MAX_RPM 170
-#define MIN_RPM 10
+#define MAX_RPM 140
+#define MIN_RPM 40
 
-#define kp 1
-#define kd 0.06
-#define ki 0.015
+#define kp 0.5
+#define ki 1
+#define kd 0.5
 
-#define NUM_MEDICOES 5  // Número de medições para calcular a média
+#define NUM_MEDICOES 20  // Número de medições para calcular a média
 
-float preset = 0;
+int preset = 0;
 bool sensor = false;
 bool s_rise = false;
 float velocidade = 0;
@@ -21,10 +21,15 @@ unsigned long last_time = 0;
 unsigned long t_rise = 0;
 float control = 0;
 float media_velocidade = 0;
+float media_preset = 0;
 
 float medicoes[NUM_MEDICOES];  // Array para armazenar as últimas medições
 int indiceMedicao = 0;         // Índice atual do array
 bool arrayCompleto = false;    // Indica se o array já está completo
+float potenciometro[NUM_MEDICOES];  // Array para armazenar as últimas medições
+
+int indicePot = 0;         // Índice atual do array
+bool potCompleto = false;    // Indica se o array já está completo
 
 void setup() {
   pinMode(9, OUTPUT);
@@ -39,7 +44,9 @@ void setup() {
 
 void loop() {
   time = millis();
-  if (time > last_time) {
+  if (time > last_time+10) {  // Atualiza a cada 100ms (10 vezes por segundo)
+
+    // Leitura e mapeamento do valor do potenciômetro
     preset = (analogRead(A0) / 1023.0) * (MAX_RPM - MIN_RPM) + MIN_RPM;
     sensor = digitalRead(13);
 
@@ -65,18 +72,40 @@ void loop() {
         }
         media_velocidade = soma / count;
 
-        P_error = preset - media_velocidade;
-        // D_error = P_error - D_error;
-        // I_error = I_error + P_error;
+        potenciometro[indicePot] = preset;
+        indicePot = (indicePot + 1) % NUM_MEDICOES;  // Atualize o índice circular
 
-        // control = P_error * kp + D_error * kd + I_error * ki;
-        control = P_error * kp;
+        // Verifique se o array já está completo
+        if (indicePot == 0) {
+          potCompleto = true;
+        }
 
+        float soma1 = 0;
+        int count1 = potCompleto ? NUM_MEDICOES : indicePot;
+        for (int i = 0; i < count; i++) {
+          soma1 += potenciometro[i];
+        }
+        media_preset = soma1 / count1;
+
+        // Cálculo dos erros PID
+        float last_P_error = P_error;                             // Armazena o erro proporcional anterior
+        P_error = media_preset - media_velocidade;                      // Erro proporcional atual
+        D_error = (P_error - last_P_error) / (time - last_time);  // Erro derivativo
+        I_error += P_error / (time - last_time);                  // Erro integral
+
+        // Serial.print("I_error:");
+        // Serial.println(I_error);
+        // Controlador PID
+        control = P_error * kp + D_error * kd + I_error * ki;
+        // control = P_error * kp + I_error * ki;
+
+
+        // Limita o valor do controle ao intervalo PWM permitido (0-255)
         if (control < 0)
           control = 0;
-
         if (control > 255)
           control = 255;
+        last_time = time;
       }
     }
     s_rise = sensor;
@@ -84,11 +113,10 @@ void loop() {
     Serial.print("Velocidade:");
     Serial.print(media_velocidade);
     Serial.print(", Preset:");
-    Serial.print(preset);
+    Serial.println(media_preset);
     Serial.print(", Control:");
     Serial.println(control);
 
-    analogWrite(9, control);  // Controla a velocidade do motor com PWM
-    last_time = time;
+    analogWrite(9, media_preset + control);  // Controla a velocidade do motor com PWM
   }
 }
