@@ -4,7 +4,7 @@
 
 #define kp 1
 #define kd 0.06
-#define ki 1
+#define ki 0.015
 
 #define NUM_MEDICOES 5  // Número de medições para calcular a média
 
@@ -66,11 +66,11 @@ void loop() {
         media_velocidade = soma / count;
 
         P_error = preset - media_velocidade;
-        I_error = I_error + P_error;
         // D_error = P_error - D_error;
+        // I_error = I_error + P_error;
 
         // control = P_error * kp + D_error * kd + I_error * ki;
-        control = P_error * kp + I_error * ki;
+        control = P_error * kp;
 
         if (control < 0)
           control = 0;
@@ -88,7 +88,7 @@ void loop() {
     Serial.print(", Control:");
     Serial.println(control);
 
-    analogWrite(9, 255 - control);
+    analogWrite(9, control);  // Controla a velocidade do motor com PWM
     last_time = time;
   }
 }
